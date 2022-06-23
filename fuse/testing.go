@@ -77,7 +77,7 @@ func getHandler(id C.int) replyHandler {
 	return reqMap[int(id)]
 }
 
-func bridgeLookup(fsID int, ino int64, name string, handler replyHandler) {
+func bridgeLookup(fsID int, ino InodeID, name string, handler replyHandler) {
 	req := newReq(handler, fsID)
 	defer freeReq(req)
 	cstr := C.CString(name)
@@ -85,19 +85,19 @@ func bridgeLookup(fsID int, ino int64, name string, handler replyHandler) {
 	C.bridge_lookup(req, C.fuse_ino_t(ino), cstr)
 }
 
-func bridgeForget(fsID int, ino int64, n int64, handler replyHandler) {
+func bridgeForget(fsID int, ino InodeID, n int64, handler replyHandler) {
 	req := newReq(handler, fsID)
 	defer freeReq(req)
 	C.bridge_forget(req, C.fuse_ino_t(ino), C.ulong(n))
 }
 
-func bridgeGetAttr(fsID int, ino int64, handler replyHandler) {
+func bridgeGetAttr(fsID int, ino InodeID, handler replyHandler) {
 	req := newReq(handler, fsID)
 	defer freeReq(req)
 	C.bridge_getattr(req, C.fuse_ino_t(ino), (*C.struct_fuse_file_info)(nil))
 }
 
-func bridgeStatFs(fsID int, ino int64, handler replyHandler) {
+func bridgeStatFs(fsID int, ino InodeID, handler replyHandler) {
 	req := newReq(handler, fsID)
 	defer freeReq(req)
 	C.bridge_statfs(req, C.fuse_ino_t(ino))

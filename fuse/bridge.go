@@ -17,10 +17,10 @@ var fsMapLock sync.RWMutex
 var rawFSMap = make(map[int]FileSystem)
 var nextFSID = 1
 
-// enableBridgeTestMode can be used to enable the global bridge test mode.
+// EnableBridgeTestMode can be used to enable the global bridge test mode.
 // This prevents fuse_reply callbacks, since there is no active FUSE filesystem.
 // Used to allow internal testing of C <-> Go translation layers.
-func enableBridgeTestMode() {
+func EnableBridgeTestMode() {
 	C.enable_bridge_test_mode()
 }
 
@@ -102,7 +102,7 @@ func ll_Destroy(id C.int) {
 //export ll_StatFS
 func ll_StatFS(id C.int, ino C.fuse_ino_t, stat *C.struct_statvfs) C.int {
 	fs := getFS(int(id))
-	s, err := fs.StatFS(int64(ino))
+	s, err := fs.StatFS(InodeID(ino))
 	if err == OK {
 		s.toCStat(stat)
 	}
@@ -115,7 +115,7 @@ func ll_SetXAttr(id C.int, ino C.fuse_ino_t, name *C.char, value unsafe.Pointer,
 
 	fs := getFS(int(id))
 	data := zeroCopyBuf(value, int(size))
-	err := fs.SetXAttr(int64(ino), C.GoString(name), data, int(flags))
+	err := fs.SetXAttr(InodeID(ino), C.GoString(name), data, int(flags))
 	return C.int(err)
 }
 
@@ -127,10 +127,10 @@ func ll_GetXAttr(id C.int, ino C.fuse_ino_t, name *C.char, buf unsafe.Pointer,
 	var err Status
 	var outSize int
 	if *size == 0 {
-		outSize, err = fs.GetXAttrSize(int64(ino), C.GoString(name))
+		outSize, err = fs.GetXAttrSize(InodeID(ino), C.GoString(name))
 	} else {
 		out := zeroCopyBuf(buf, int(*size))
-		outSize, err = fs.GetXAttr(int64(ino), C.GoString(name), out)
+		outSize, err = fs.GetXAttr(InodeID(ino), C.GoString(name), out)
 	}
 	if err == OK {
 		*size = C.size_t(outSize)
@@ -143,7 +143,7 @@ func ll_Lookup(id C.int, dir C.fuse_ino_t, name *C.char,
 	cent *C.struct_fuse_entry_param) C.int {
 
 	fs := getFS(int(id))
-	ent, err := fs.Lookup(int64(dir), C.GoString(name))
+	ent, err := fs.Lookup(InodeID(dir), C.GoString(name))
 	if err == OK {
 		ent.toCEntry(cent)
 	}
@@ -153,7 +153,7 @@ func ll_Lookup(id C.int, dir C.fuse_ino_t, name *C.char,
 //export ll_Forget
 func ll_Forget(id C.int, ino C.fuse_ino_t, n C.int) {
 	fs := getFS(int(id))
-	fs.Forget(int64(ino), int(n))
+	fs.Forget(InodeID(ino), int(n))
 }
 
 //export ll_GetAttr
@@ -161,7 +161,7 @@ func ll_GetAttr(id C.int, ino C.fuse_ino_t, fi *C.struct_fuse_file_info,
 	cattr *C.struct_stat, ctimeout *C.double) C.int {
 
 	fs := getFS(int(id))
-	attr, err := fs.GetAttr(int64(ino), newFileInfo(fi))
+	attr, err := fs.GetAttr(InodeID(ino), newFileInfo(fi))
 	if err == OK {
 		attr.toCStat(cattr, ctimeout)
 	}
@@ -175,7 +175,7 @@ func ll_SetAttr(id C.int, ino C.fuse_ino_t, attr *C.struct_stat, toSet C.int,
 	fs := getFS(int(id))
 	var ia InoAttr
 	ia.fromCStat(attr)
-	oattr, err := fs.SetAttr(int64(ino), &ia, SetAttrMask(toSet), newFileInfo(fi))
+	oattr, err := fs.SetAttr(InodeID(ino), &ia, SetAttrMask(toSet), newFileInfo(fi))
 	if err == OK {
 		oattr.toCStat(cattr, ctimeout)
 	}
@@ -188,7 +188,7 @@ func ll_ReadDir(id C.int, ino C.fuse_ino_t, size C.size_t, off C.off_t,
 
 	fs := getFS(int(id))
 	writer := &dirBuf{db}
-	err := fs.ReadDir(int64(ino), newFileInfo(fi), int64(off), int(size), writer)
+	err := fs.ReadDir(InodeID(ino), newFileInfo(fi), int64(off), int(size), writer)
 	return C.int(err)
 }
 
@@ -196,7 +196,7 @@ func ll_ReadDir(id C.int, ino C.fuse_ino_t, size C.size_t, off C.off_t,
 func ll_Open(id C.int, ino C.fuse_ino_t, fi *C.struct_fuse_file_info) C.int {
 	fs := getFS(int(id))
 	info := newFileInfo(fi)
-	err := fs.Open(int64(ino), info)
+	err := fs.Open(InodeID(ino), info)
 	if err == OK {
 		fi.fh = C.uint64_t(info.Handle)
 	}
@@ -207,7 +207,7 @@ func ll_Open(id C.int, ino C.fuse_ino_t, fi *C.struct_fuse_file_info) C.int {
 func ll_OpenDir(id C.int, ino C.fuse_ino_t, fi *C.struct_fuse_file_info) C.int {
 	fs := getFS(int(id))
 	info := newFileInfo(fi)
-	err := fs.OpenDir(int64(ino), info)
+	err := fs.OpenDir(InodeID(ino), info)
 	if err == OK {
 		fi.fh = C.uint64_t(info.Handle)
 	}
@@ -217,14 +217,14 @@ func ll_OpenDir(id C.int, ino C.fuse_ino_t, fi *C.struct_fuse_file_info) C.int {
 //export ll_Release
 func ll_Release(id C.int, ino C.fuse_ino_t, fi *C.struct_fuse_file_info) C.int {
 	fs := getFS(int(id))
-	err := fs.Release(int64(ino), newFileInfo(fi))
+	err := fs.Release(InodeID(ino), newFileInfo(fi))
 	return C.int(err)
 }
 
 //export ll_ReleaseDir
 func ll_ReleaseDir(id C.int, ino C.fuse_ino_t, fi *C.struct_fuse_file_info) C.int {
 	fs := getFS(int(id))
-	err := fs.ReleaseDir(int64(ino), newFileInfo(fi))
+	err := fs.ReleaseDir(InodeID(ino), newFileInfo(fi))
 	return C.int(err)
 }
 
@@ -232,7 +232,7 @@ func ll_ReleaseDir(id C.int, ino C.fuse_ino_t, fi *C.struct_fuse_file_info) C.in
 func ll_FSync(id C.int, ino C.fuse_ino_t, datasync C.int, fi *C.struct_fuse_file_info) C.int {
 	fs := getFS(int(id))
 	var dataOnly bool = datasync != 0
-	err := fs.FSync(int64(ino), dataOnly, newFileInfo(fi))
+	err := fs.FSync(InodeID(ino), dataOnly, newFileInfo(fi))
 	return C.int(err)
 }
 
@@ -240,14 +240,14 @@ func ll_FSync(id C.int, ino C.fuse_ino_t, datasync C.int, fi *C.struct_fuse_file
 func ll_FSyncDir(id C.int, ino C.fuse_ino_t, datasync C.int, fi *C.struct_fuse_file_info) C.int {
 	fs := getFS(int(id))
 	var dataOnly bool = datasync != 0
-	err := fs.FSyncDir(int64(ino), dataOnly, newFileInfo(fi))
+	err := fs.FSyncDir(InodeID(ino), dataOnly, newFileInfo(fi))
 	return C.int(err)
 }
 
 //export ll_Flush
 func ll_Flush(id C.int, ino C.fuse_ino_t, fi *C.struct_fuse_file_info) C.int {
 	fs := getFS(int(id))
-	err := fs.Flush(int64(ino), newFileInfo(fi))
+	err := fs.Flush(InodeID(ino), newFileInfo(fi))
 	return C.int(err)
 }
 
@@ -258,7 +258,7 @@ func ll_Read(id C.int, req C.fuse_req_t, ino C.fuse_ino_t, size C.size_t, off C.
 	fs := getFS(int(id))
 
 	// Create slice backed by C buffer.
-	buf, err := fs.Read(int64(ino), int64(size), int64(off), newFileInfo(fi))
+	buf, err := fs.Read(InodeID(ino), int64(size), int64(off), newFileInfo(fi))
 	if err != OK {
 		return C.int(err)
 	}
@@ -273,7 +273,7 @@ func ll_Write(id C.int, ino C.fuse_ino_t, buf unsafe.Pointer, n *C.size_t, off C
 
 	fs := getFS(int(id))
 	in := zeroCopyBuf(buf, int(*n))
-	written, err := fs.Write(in, int64(ino), int64(off), newFileInfo(fi))
+	written, err := fs.Write(in, InodeID(ino), int64(off), newFileInfo(fi))
 	if err == OK {
 		*n = C.size_t(written)
 	}
@@ -285,7 +285,7 @@ func ll_Mknod(id C.int, dir C.fuse_ino_t, name *C.char, mode C.mode_t,
 	rdev C.dev_t, cent *C.struct_fuse_entry_param) C.int {
 
 	fs := getFS(int(id))
-	ent, err := fs.Mknod(int64(dir), C.GoString(name), int(mode), int(rdev))
+	ent, err := fs.Mknod(InodeID(dir), C.GoString(name), int(mode), int(rdev))
 	if err == OK {
 		ent.toCEntry(cent)
 	}
@@ -296,7 +296,7 @@ func ll_Mknod(id C.int, dir C.fuse_ino_t, name *C.char, mode C.mode_t,
 func ll_ListXAttr(id C.int, ino C.fuse_ino_t, buf unsafe.Pointer, size *C.size_t) C.int {
 	out := zeroCopyBuf(buf, int(*size))
 	fs := getFS(int(id))
-	keys, err := fs.ListXAttrs(int64(ino))
+	keys, err := fs.ListXAttrs(InodeID(ino))
 	if err != OK {
 		return C.int(err)
 	}
@@ -321,14 +321,14 @@ func ll_ListXAttr(id C.int, ino C.fuse_ino_t, buf unsafe.Pointer, size *C.size_t
 //export ll_RemoveXAttr
 func ll_RemoveXAttr(id C.int, ino C.fuse_ino_t, name *C.char) C.int {
 	fs := getFS(int(id))
-	err := fs.RemoveXAttr(int64(ino), C.GoString(name))
+	err := fs.RemoveXAttr(InodeID(ino), C.GoString(name))
 	return C.int(err)
 }
 
 //export ll_Access
 func ll_Access(id C.int, ino C.fuse_ino_t, mask C.int) C.int {
 	fs := getFS(int(id))
-	return C.int(fs.Access(int64(ino), int(mask)))
+	return C.int(fs.Access(InodeID(ino), int(mask)))
 }
 
 //export ll_Create
@@ -337,7 +337,7 @@ func ll_Create(id C.int, dir C.fuse_ino_t, name *C.char, mode C.mode_t,
 
 	fs := getFS(int(id))
 	info := newFileInfo(fi)
-	ent, err := fs.Create(int64(dir), C.GoString(name), int(mode), info)
+	ent, err := fs.Create(InodeID(dir), C.GoString(name), int(mode), info)
 	if err == OK {
 		ent.toCEntry(cent)
 		fi.fh = C.uint64_t(info.Handle)
@@ -350,7 +350,7 @@ func ll_Mkdir(id C.int, dir C.fuse_ino_t, name *C.char, mode C.mode_t,
 	cent *C.struct_fuse_entry_param) C.int {
 
 	fs := getFS(int(id))
-	ent, err := fs.Mkdir(int64(dir), C.GoString(name), int(mode))
+	ent, err := fs.Mkdir(InodeID(dir), C.GoString(name), int(mode))
 	if err == OK {
 		ent.toCEntry(cent)
 	}
@@ -360,7 +360,7 @@ func ll_Mkdir(id C.int, dir C.fuse_ino_t, name *C.char, mode C.mode_t,
 //export ll_Rmdir
 func ll_Rmdir(id C.int, dir C.fuse_ino_t, name *C.char) C.int {
 	fs := getFS(int(id))
-	err := fs.Rmdir(int64(dir), C.GoString(name))
+	err := fs.Rmdir(InodeID(dir), C.GoString(name))
 	return C.int(err)
 }
 
@@ -368,7 +368,7 @@ func ll_Rmdir(id C.int, dir C.fuse_ino_t, name *C.char) C.int {
 func ll_Symlink(id C.int, link *C.char, parent C.fuse_ino_t, name *C.char,
 	cent *C.struct_fuse_entry_param) C.int {
 	fs := getFS(int(id))
-	ent, err := fs.Symlink(C.GoString(link), int64(parent), C.GoString(name))
+	ent, err := fs.Symlink(C.GoString(link), InodeID(parent), C.GoString(name))
 	if err == OK {
 		ent.toCEntry(cent)
 	}
@@ -379,7 +379,7 @@ func ll_Symlink(id C.int, link *C.char, parent C.fuse_ino_t, name *C.char,
 func ll_Link(id C.int, ino C.fuse_ino_t, newparent C.fuse_ino_t, name *C.char,
 	cent *C.struct_fuse_entry_param) C.int {
 	fs := getFS(int(id))
-	ent, err := fs.Link(int64(ino), int64(newparent), C.GoString(name))
+	ent, err := fs.Link(InodeID(ino), InodeID(newparent), C.GoString(name))
 	if err == OK {
 		ent.toCEntry(cent)
 	}
@@ -389,7 +389,7 @@ func ll_Link(id C.int, ino C.fuse_ino_t, newparent C.fuse_ino_t, name *C.char,
 //export ll_ReadLink
 func ll_ReadLink(id C.int, ino C.fuse_ino_t, err *C.int) *C.char {
 	fs := getFS(int(id))
-	s, e := fs.ReadLink(int64(ino))
+	s, e := fs.ReadLink(InodeID(ino))
 	*err = C.int(e)
 	if e == OK {
 		return C.CString(s)
@@ -400,7 +400,7 @@ func ll_ReadLink(id C.int, ino C.fuse_ino_t, err *C.int) *C.char {
 //export ll_Unlink
 func ll_Unlink(id C.int, dir C.fuse_ino_t, name *C.char) C.int {
 	fs := getFS(int(id))
-	err := fs.Unlink(int64(dir), C.GoString(name))
+	err := fs.Unlink(InodeID(dir), C.GoString(name))
 	return C.int(err)
 }
 
@@ -409,7 +409,7 @@ func ll_Rename(id C.int, dir C.fuse_ino_t, name *C.char,
 	newdir C.fuse_ino_t, newname *C.char) C.int {
 
 	fs := getFS(int(id))
-	err := fs.Rename(int64(dir), C.GoString(name), int64(newdir), C.GoString(newname))
+	err := fs.Rename(InodeID(dir), C.GoString(name), InodeID(newdir), C.GoString(newname))
 	return C.int(err)
 }
 
@@ -417,7 +417,7 @@ type dirBuf struct {
 	db *C.struct_DirBuf
 }
 
-func (d *dirBuf) Add(name string, ino int64, mode int, next int64) bool {
+func (d *dirBuf) Add(name string, ino InodeID, mode int, next InodeID) bool {
 	cstr := C.CString(name)
 	res := C.DirBufAdd(d.db, cstr, C.fuse_ino_t(ino), C.int(mode), C.off_t(next))
 	C.free(unsafe.Pointer(cstr))

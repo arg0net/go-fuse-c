@@ -22,7 +22,7 @@ func (s *StatVFS) toCStat(o *C.struct_statvfs) {
 }
 
 func (a *InoAttr) fromCStat(i *C.struct_stat) {
-	a.Ino = int64(i.st_ino)
+	a.Ino = InodeID(i.st_ino)
 	a.Mode = int(i.st_mode)
 	a.NLink = int(i.st_nlink)
 	a.Size = int64(i.st_size)

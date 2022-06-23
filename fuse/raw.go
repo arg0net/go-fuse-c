@@ -4,6 +4,8 @@ import (
 	"time"
 )
 
+type InodeID uint64
+
 // FileSystem operations for FUSE's LowLevel API.
 type FileSystem interface {
 	// Init initializes a filesystem.
@@ -15,17 +17,17 @@ type FileSystem interface {
 	Destroy()
 
 	// StatFS gets file system statistics.
-	StatFS(ino int64) (*StatVFS, Status)
+	StatFS(ino InodeID) (*StatVFS, Status)
 
 	// Lookup finds a directory entry by name and get its attributes.
-	Lookup(dir int64, name string) (*Entry, Status)
+	Lookup(dir InodeID, name string) (*Entry, Status)
 
 	// Forget limits the lifetime of an inode.
 	//
 	// The n parameter indicates the number of lookups previously performed on this inode.
 	// The filesystem may ignore forget calls if the inodes don't need to have a limited lifetime.
 	// On unmount it is not guaranteed that all reference dinodes will receive a forget message.
-	Forget(ino int64, n int)
+	Forget(ino InodeID, n int)
 
 	// Release drops an open file reference.
 	//
@@ -40,7 +42,7 @@ type FileSystem interface {
 	// fi.Handle will contain the value set by the open method, or will be undefined if the open
 	// method didn't set any value.
 	// fi.Flags will contain the same flags as for open.
-	Release(ino int64, fi *FileInfo) Status
+	Release(ino InodeID, fi *FileInfo) Status
 
 	// Flush is called on each close() of an opened file.
 	//
@@ -52,18 +54,18 @@ type FileSystem interface {
 	//
 	// The name of the method is misleading. Unlike fsync, the filesystem is not forced to flush
 	// pending writes.
-	Flush(ino int64, fi *FileInfo) Status
+	Flush(ino InodeID, fi *FileInfo) Status
 
 	// Fsync synchronizes file contents.
 	//
 	// If the dataOnly parameter is true, then only the user data should be flushed, not the
 	// metdata.
-	FSync(ino int64, dataOnly bool, fi *FileInfo) Status
+	FSync(ino InodeID, dataOnly bool, fi *FileInfo) Status
 
 	// Getattr gets file attributes.
 	//
 	// fi is for future use, currently always nil.
-	GetAttr(ino int64, fi *FileInfo) (attr *InoAttr, err Status)
+	GetAttr(ino InodeID, fi *FileInfo) (attr *InoAttr, err Status)
 
 	// Setattr sets file attributes.
 	//
@@ -72,10 +74,10 @@ type FileSystem interface {
 	//
 	// If the setattr was invoked from the ftruncate() system call, the fi.Handle will contain the
 	// value set by the open method.  Otherwise, the fi argument may be nil.
-	SetAttr(ino int64, attr *InoAttr, mask SetAttrMask, fi *FileInfo) (*InoAttr, Status)
+	SetAttr(ino InodeID, attr *InoAttr, mask SetAttrMask, fi *FileInfo) (*InoAttr, Status)
 
 	// ReadLink reads a symbolic link.
-	ReadLink(ino int64) (string, Status)
+	ReadLink(ino InodeID) (string, Status)
 
 	// ReadDir reads a directory.
 	//
@@ -83,7 +85,7 @@ type FileSystem interface {
 	// opendir method didn't set any value.
 	//
 	// DirEntryWriter is used to add entries to the output buffer.
-	ReadDir(ino int64, fi *FileInfo, off int64, size int, w DirEntryWriter) Status
+	ReadDir(ino InodeID, fi *FileInfo, off int64, size int, w DirEntryWriter) Status
 
 	// OpenDir opens a directory.
 	//
@@ -91,7 +93,7 @@ type FileSystem interface {
 	// operations (ReadDir, ReleaseDir, FsyncDir). Filesystems may not store anything in fi.Handle,
 	// though that makes it impossible to implement standard conforming directory stream operations
 	// in case the contents of the directory can change between opendir and releasedir.
-	OpenDir(ino int64, fi *FileInfo) Status
+	OpenDir(ino InodeID, fi *FileInfo) Status
 
 	// ReleaseDir drops an open file reference.
 	//
@@ -99,34 +101,34 @@ type FileSystem interface {
 	//
 	// fi.Handle will contain the value set by the OpenDir method, or will be undefined if the
 	// OpenDir method didn't set any value.
-	ReleaseDir(ino int64, fi *FileInfo) Status
+	ReleaseDir(ino InodeID, fi *FileInfo) Status
 
 	// FsyncDir synchronizes directory contents.
 	//
 	// If the dataOnly parameter is true, then only the user data should be flushed, not the
 	// metdata.
-	FSyncDir(ino int64, dataOnly bool, fi *FileInfo) Status
+	FSyncDir(ino InodeID, dataOnly bool, fi *FileInfo) Status
 
 	// Mkdir creates a directory.
-	Mkdir(parent int64, name string, mode int) (*Entry, Status)
+	Mkdir(parent InodeID, name string, mode int) (*Entry, Status)
 
 	// Rmdir removes a directory.
-	Rmdir(parent int64, name string) Status
+	Rmdir(parent InodeID, name string) Status
 
 	// Rename renames a file or directory.
-	Rename(dir int64, name string, newdir int64, newname string) Status
+	Rename(dir InodeID, name string, newdir InodeID, newname string) Status
 
 	// Symlink creates a symbolic link.
-	Symlink(link string, parent int64, name string) (*Entry, Status)
+	Symlink(link string, parent InodeID, name string) (*Entry, Status)
 
 	// Link creates a hard link.
-	Link(ino int64, newparent int64, name string) (*Entry, Status)
+	Link(ino InodeID, newparent InodeID, name string) (*Entry, Status)
 
 	// Mknod creates a file node.
 	//
 	// This is used to create a regular file, or special files such as character devices, block
 	// devices, fifo or socket nodes.
-	Mknod(parent int64, name string, mode int, rdev int) (*Entry, Status)
+	Mknod(parent InodeID, name string, mode int, rdev int) (*Entry, Status)
 
 	// Open makes a file available for read or write.
 	//
@@ -135,30 +137,30 @@ type FileSystem interface {
 	// Filesystems may store an arbitrary file handle in fh.Handle and use this in other file
 	// operations (read, write, flush, release, fsync). Filesystems may also implement stateless file
 	// I/O and not store anything in fi.Handle.
-	Open(ino int64, fi *FileInfo) Status
+	Open(ino InodeID, fi *FileInfo) Status
 
 	// Read reads data from an open file.
 	//
 	// Read should return eXActly the number of bytes requested except on EOF or error.
 	//
 	// fi.Handle will contain the value set by the open method, if any.
-	Read(ino int64, size int64, off int64, fi *FileInfo) (data []byte, err Status)
+	Read(ino InodeID, size int64, off int64, fi *FileInfo) (data []byte, err Status)
 
 	// Write writes data to an open file.
 	//
 	// Write should return eXActly the number of bytes requested except on error.
 	//
 	// fi.handle will contain the value set by the open method, if any.
-	Write(p []byte, ino int64, off int64, fi *FileInfo) (n int, err Status)
+	Write(p []byte, ino InodeID, off int64, fi *FileInfo) (n int, err Status)
 
 	// Unlink removes a file.
-	Unlink(parent int64, name string) Status
+	Unlink(parent InodeID, name string) Status
 
 	// Access checks file access permissions.
 	//
 	// This will be called for the access() system call.  If the 'default_permissions' mount option
 	// is given, this method is not called.
-	Access(ino int64, mask int) Status
+	Access(ino InodeID, mask int) Status
 
 	// Create creates and opens a file.
 	//
@@ -170,24 +172,24 @@ type FileSystem interface {
 	// operations (Read, Write, Flush, Release, FSync).
 	//
 	// If this method is not implemented, then Mknod and Open methods will be called instead.
-	Create(parent int64, name string, mode int, fi *FileInfo) (*Entry, Status)
+	Create(parent InodeID, name string, mode int, fi *FileInfo) (*Entry, Status)
 
 	// Returns a list of the extended attribute keys.
-	ListXAttrs(ino int64) ([]string, Status)
+	ListXAttrs(ino InodeID) ([]string, Status)
 
 	// Returns the size of the attribute value.
-	GetXAttrSize(ino int64, name string) (int, Status)
+	GetXAttrSize(ino InodeID, name string) (int, Status)
 
 	// Get an extended attribute.
 	// Result placed in out buffer.
 	// Returns the number of bytes copied.
-	GetXAttr(ino int64, name string, out []byte) (int, Status)
+	GetXAttr(ino InodeID, name string, out []byte) (int, Status)
 
 	// Set an extended attribute.
-	SetXAttr(ino int64, name string, value []byte, flags int) Status
+	SetXAttr(ino InodeID, name string, value []byte, flags int) Status
 
 	// Remove an extended attribute.
-	RemoveXAttr(ino int64, name string) Status
+	RemoveXAttr(ino InodeID, name string) Status
 }
 
 // StatVFS contains filesystem statistics for StatFS calls.
@@ -208,7 +210,7 @@ type StatVFS struct {
 type DirEntryWriter interface {
 	// Returns true if the entry was added, false if there is no more space
 	// in the response buffer.
-	Add(name string, ino int64, mode int, next int64) bool
+	Add(name string, ino InodeID, mode int, next InodeID) bool
 }
 
 // FileInfo holds file information, used in a number of APIs.
@@ -254,7 +256,7 @@ type Entry struct {
 	// Returning ENOENT also means negative entry, but by setting zero
 	// ino the kernel may cache negative entries for entry_timeout
 	// seconds.
-	Ino int64
+	Ino InodeID
 
 	// Generation number for this entry.
 	//
@@ -286,7 +288,7 @@ type Entry struct {
 // how many bytes to request. If this value is not correct,
 // incorrect data will be returned.
 type InoAttr struct {
-	Ino   int64
+	Ino   InodeID
 	Size  int64
 	Mode  int
 	NLink int

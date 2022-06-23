@@ -11,7 +11,7 @@ var fs FileSystem
 var fsID int
 
 func TestMain(m *testing.M) {
-	enableBridgeTestMode()
+	EnableBridgeTestMode()
 
 	fs = NewMemFS()
 	fsID = RegisterFS(fs)
