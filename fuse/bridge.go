@@ -1,7 +1,6 @@
 package fuse
 
 import (
-	"reflect"
 	"sync"
 	"time"
 	"unsafe"
@@ -65,13 +64,9 @@ func Version() int {
 
 // zeroCopyBuf creates a byte array backed by a C buffer.
 func zeroCopyBuf(buf unsafe.Pointer, size int) []byte {
-	// Create slice backed by C buffer.
-	hdr := reflect.SliceHeader{
-		Data: uintptr(buf),
-		Len:  size,
-		Cap:  size,
-	}
-	return *(*[]byte)(unsafe.Pointer(&hdr))
+	// Return slice backed by C buffer.
+	// This is not garabage collected in Go.
+	return unsafe.Slice((*byte)(buf), size)
 }
 
 //export ll_Init
