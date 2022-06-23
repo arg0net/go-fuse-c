@@ -16,7 +16,7 @@ type helloFS struct {
 	fuse.DefaultFileSystem
 }
 
-func (h *helloFS) stat(ino int64) *fuse.InoAttr {
+func (h *helloFS) stat(ino fuse.InodeID) *fuse.InoAttr {
 	fmt.Println("stat", ino)
 	stat := &fuse.InoAttr{
 		Ino:     ino,
@@ -41,7 +41,7 @@ func (h *helloFS) stat(ino int64) *fuse.InoAttr {
 	return stat
 }
 
-func (h *helloFS) GetAttr(ino int64, info *fuse.FileInfo) (
+func (h *helloFS) GetAttr(ino fuse.InodeID, info *fuse.FileInfo) (
 	attr *fuse.InoAttr, err fuse.Status) {
 
 	fmt.Println("GetAttr", ino)
@@ -52,7 +52,7 @@ func (h *helloFS) GetAttr(ino int64, info *fuse.FileInfo) (
 	return s, fuse.OK
 }
 
-func (h *helloFS) Lookup(parent int64, name string) (
+func (h *helloFS) Lookup(parent fuse.InodeID, name string) (
 	entry *fuse.Entry, err fuse.Status) {
 
 	fmt.Println("Lookup", parent, name)
@@ -70,7 +70,7 @@ func (h *helloFS) Lookup(parent int64, name string) (
 	return e, fuse.OK
 }
 
-func (h *helloFS) StatFs(ino int64) (stat *fuse.StatVFS, err fuse.Status) {
+func (h *helloFS) StatFs(ino fuse.InodeID) (stat *fuse.StatVFS, err fuse.Status) {
 	fmt.Println("statfs", ino)
 	stat = &fuse.StatVFS{
 		Files:     1,
@@ -81,7 +81,7 @@ func (h *helloFS) StatFs(ino int64) (stat *fuse.StatVFS, err fuse.Status) {
 	return
 }
 
-func (h *helloFS) ReadDir(ino int64, fi *fuse.FileInfo, off int64, size int,
+func (h *helloFS) ReadDir(ino fuse.InodeID, fi *fuse.FileInfo, off int64, size int,
 	w fuse.DirEntryWriter) fuse.Status {
 
 	fmt.Println("ReadDir", ino, off, size)
@@ -101,7 +101,7 @@ func (h *helloFS) ReadDir(ino int64, fi *fuse.FileInfo, off int64, size int,
 	return fuse.OK
 }
 
-func (h *helloFS) Open(ino int64, fi *fuse.FileInfo) fuse.Status {
+func (h *helloFS) Open(ino fuse.InodeID, fi *fuse.FileInfo) fuse.Status {
 	fmt.Println("Open", ino)
 	switch {
 	case ino != 2:
@@ -113,7 +113,7 @@ func (h *helloFS) Open(ino int64, fi *fuse.FileInfo) fuse.Status {
 	}
 }
 
-func (h *helloFS) Read(ino int64, size int64, off int64,
+func (h *helloFS) Read(ino fuse.InodeID, size int64, off int64,
 	fi *fuse.FileInfo) ([]byte, fuse.Status) {
 
 	fmt.Println("Read", ino, off)
