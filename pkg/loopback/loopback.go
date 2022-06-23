@@ -12,12 +12,6 @@ import (
 
 type InodeID = fuse.InodeID
 
-type dir struct {
-}
-
-type file struct {
-}
-
 type FS struct {
 	fuse.DefaultFileSystem
 
@@ -28,8 +22,9 @@ type FS struct {
 }
 
 type inode struct {
-	path string
-	stat syscall.Stat_t
+	path   string
+	lcount int
+	stat   syscall.Stat_t
 }
 
 func (i *inode) Entry() *fuse.Entry {
@@ -63,7 +58,8 @@ var _ fuse.FileSystem = &FS{}
 
 func New(root string) (*FS, error) {
 	node := &inode{
-		path: root,
+		path:   root,
+		lcount: 1,
 	}
 	if err := syscall.Stat(root, &node.stat); err != nil {
 		return nil, err
@@ -108,19 +104,29 @@ func (fs *FS) Lookup(dir InodeID, name string) (*fuse.Entry, fuse.Status) {
 
 	fqn := filepath.Join(parent.path, name)
 	node := &inode{
-		path: fqn,
+		path:   fqn,
+		lcount: 1,
 	}
 	if err := syscall.Stat(fqn, &node.stat); err != nil {
 		return nil, xlateErr(err)
 	}
 
 	fs.mu.Lock()
-	fs.inodes[InodeID(node.stat.Ino)] = node
+	if existing := fs.inodes[InodeID(node.stat.Ino)]; existing != nil {
+		node = existing
+		node.lcount++
+	} else {
+		fs.inodes[InodeID(node.stat.Ino)] = node
+	}
 	fs.mu.Unlock()
 	return node.Entry(), fuse.OK
 }
 
 func xlateErr(err error) fuse.Status {
+	if err == nil {
+		return fuse.OK
+	}
+
 	var errno syscall.Errno
 	if errors.As(err, &errno) {
 		return fuse.Status(errno)
@@ -135,7 +141,16 @@ func xlateErr(err error) fuse.Status {
 // The filesystem may ignore forget calls if the inodes don't need to have a limited lifetime.
 // On unmount it is not guaranteed that all reference dinodes will receive a forget message.
 func (fs *FS) Forget(ino InodeID, n int) {
-	panic("not implemented") // TODO: Implement
+	node := fs.getNode(ino)
+	if node == nil {
+		return
+	}
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	node.lcount--
+	if node.lcount == 0 {
+		delete(fs.inodes, ino)
+	}
 }
 
 // Release drops an open file reference.
@@ -152,7 +167,8 @@ func (fs *FS) Forget(ino InodeID, n int) {
 // method didn't set any value.
 // fi.Flags will contain the same flags as for open.
 func (fs *FS) Release(ino InodeID, fi *fuse.FileInfo) fuse.Status {
-	panic("not implemented") // TODO: Implement
+	err := syscall.Close(int(fi.Handle))
+	return xlateErr(err)
 }
 
 // Flush is called on each close() of an opened file.
